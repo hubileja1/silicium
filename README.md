@@ -52,6 +52,12 @@ comments (`//#if MC >= 1.21.2 … //#else … //#endif`), and every Minecraft ve
 ./gradlew :1.20.1:prodSelfTest                   # mixin self-test in a production game
 ```
 
+## Support
+
+- Bugs and ideas: [GitHub Issues](https://github.com/hubileja1/silicium/issues)
+- Discord: **hubilsupport**
+- E-mail: [hubil.support@gmail.com](mailto:hubil.support@gmail.com)
+
 ## License
 
 [MIT](LICENSE)

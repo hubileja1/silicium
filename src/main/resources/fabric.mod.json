@@ -8,6 +8,13 @@
 		"hubil"
 	],
 	"license": "MIT",
+	"contact": {
+		"homepage": "https://github.com/hubileja1/silicium",
+		"sources": "https://github.com/hubileja1/silicium",
+		"issues": "https://github.com/hubileja1/silicium/issues",
+		"email": "hubil.support@gmail.com",
+		"discord": "hubilsupport"
+	},
 	"icon": "assets/silicium/icon.png",
 	"environment": "client",
 	"entrypoints": {
