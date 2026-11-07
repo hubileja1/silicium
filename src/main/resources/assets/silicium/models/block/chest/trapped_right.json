@@ -1,0 +1,7 @@
+{
+	"parent": "silicium:block/chest/template_right",
+	"textures": {
+		"chest": "minecraft:entity/chest/trapped_right",
+		"particle": "minecraft:block/oak_planks"
+	}
+}

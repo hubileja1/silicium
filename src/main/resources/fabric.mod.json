@@ -1,0 +1,36 @@
+{
+	"schemaVersion": 1,
+	"id": "silicium",
+	"version": "${version}",
+	"name": "Silicium",
+	"description": "Client-side FPS optimizations for Minecraft 26.3: static chests, async occlusion culling, mob animation LOD, crowd limits for items/mobs/TNT, explosion, particle, fluid, piston and terrain effect limits. Works on any server (no server install needed). Settings in a Sodium video settings tab.",
+	"authors": [
+		"hubil"
+	],
+	"license": "MIT",
+	"icon": "assets/silicium/icon.png",
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			"pl.silicium.Silicium"
+		],
+		"sodium:config_api_user": [
+			"pl.silicium.compat.SodiumOptionsPage"
+		]
+//#if !SODIUM_CONFIG_API
+		, "modmenu": ["pl.silicium.compat.ModMenuIntegration"]
+//#endif
+	},
+	"mixins": [
+		"silicium.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.20.1",
+		"minecraft": "${minecraft}",
+		"java": ">=${java}",
+		"fabric-api": "*"
+	},
+	"recommends": {
+		"sodium": ">=0.9.3-beta.3"
+	}
+}

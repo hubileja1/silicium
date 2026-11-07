@@ -1,0 +1,236 @@
+// Silicium multi-version build.
+//
+// Every Minecraft version is a subproject (versions/<mc>) built from the SAME sources in src/.
+// Version differences are marked in the sources with preprocessor comments, e.g.:
+//
+//     //#if MC >= 1.21.2
+//     ... code for 1.21.2 and newer ...
+//     //#else
+//     ... code for older versions ...
+//     //#endif
+//
+// Conditions: MC <op> <version> (op: == != < <= > >=), joined with && / ||, and flags
+// from versions/<mc>/gradle.properties written as "flag.NAME=true" (used as just NAME).
+// Directive lines are removed and inactive code is dropped before compiling.
+//
+// Output: build/libs/silicium-fabric-<mod_version>+mc<minecraft>.jar for every version.
+
+plugins {
+	id 'net.fabricmc.fabric-loom' version "${loom_version}" apply false
+	id 'net.fabricmc.fabric-loom-remap' version "${loom_version}" apply false
+}
+
+static int mcNumber(String v) {
+	def p = v.tokenize('.').collect { it as int }
+	while (p.size() < 3) p << 0
+	return p[0] * 10000 + p[1] * 100 + p[2]
+}
+
+static boolean evalCondition(String expr, int mc, Map<String, Boolean> flags) {
+	return expr.split(/\|\|/).any { orPart ->
+		orPart.split(/&&/).every { raw ->
+			def t = raw.trim()
+			boolean negate = t.startsWith('!')
+			if (negate) t = t.substring(1).trim()
+			boolean r
+			def m = t =~ /^MC\s*(==|!=|<=|>=|<|>)\s*([0-9.]+)$/
+			if (m.matches()) {
+				int other = mcNumber(m.group(2))
+				switch (m.group(1)) {
+					case '==': r = mc == other; break
+					case '!=': r = mc != other; break
+					case '<': r = mc < other; break
+					case '<=': r = mc <= other; break
+					case '>': r = mc > other; break
+					default: r = mc >= other
+				}
+			} else if (t ==~ /^[A-Za-z_][A-Za-z0-9_]*$/) {
+				r = flags.getOrDefault(t, false)
+			} else {
+				throw new GradleException("Silicium preprocessor: cannot parse condition '${raw}'")
+			}
+			negate ? !r : r
+		}
+	}
+}
+
+static String preprocess(String text, int mc, Map<String, Boolean> flags, String fileName) {
+	def out = new StringBuilder()
+	def stack = [] // entries: [parentActive, anyBranchTaken]
+	boolean active = true
+	int lineNo = 0
+	for (line in text.split('\n', -1)) {
+		lineNo++
+		def t = line.trim()
+		if (t.startsWith('//#if ')) {
+			boolean c = evalCondition(t.substring(6), mc, flags)
+			stack.push([active, c])
+			active = active && c
+			continue
+		} else if (t.startsWith('//#elif ')) {
+			if (stack.isEmpty()) throw new GradleException("${fileName}:${lineNo}: //#elif without //#if")
+			def top = stack.pop()
+			boolean c = !top[1] && evalCondition(t.substring(8), mc, flags)
+			stack.push([top[0], top[1] || c])
+			active = top[0] && c
+			continue
+		} else if (t == '//#else') {
+			if (stack.isEmpty()) throw new GradleException("${fileName}:${lineNo}: //#else without //#if")
+			def top = stack.pop()
+			stack.push([top[0], true])
+			active = top[0] && !top[1]
+			continue
+		} else if (t == '//#endif') {
+			if (stack.isEmpty()) throw new GradleException("${fileName}:${lineNo}: //#endif without //#if")
+			active = stack.pop()[0]
+			continue
+		}
+		if (active) out.append(line).append('\n')
+	}
+	if (!stack.isEmpty()) throw new GradleException("${fileName}: missing //#endif")
+	return out.length() > 0 ? out.substring(0, out.length() - 1) : ''
+}
+
+def collectJars = tasks.register('collectJars', Copy) {
+	group = 'build'
+	description = 'Copies the jar of every version into build/libs'
+	into layout.buildDirectory.dir('libs')
+}
+
+subprojects { p ->
+	def mc = p.property('minecraft_version') as String
+	def mcNum = mcNumber(mc)
+	def remap = p.property('loom_type') == 'remap'
+	def javaVersion = (p.property('java_version') as String) as int
+	def flags = p.properties.findAll { k, v -> k.toString().startsWith('flag.') }
+			.collectEntries { k, v -> [(k.toString().substring(5)): v.toString().toBoolean()] } as Map<String, Boolean>
+
+	p.apply plugin: remap ? 'net.fabricmc.fabric-loom-remap' : 'net.fabricmc.fabric-loom'
+	flags['REMAP'] = remap
+	if (remap) {
+		// obfuscated versions need a mixin refmap in the jar (names are remapped to intermediary)
+		def mx = p.extensions.getByName('loom').mixin
+		mx.useLegacyMixinAp = true
+		mx.defaultRefmapName = 'silicium.refmap.json'
+	}
+
+	p.group = rootProject.property('group')
+	p.version = "${p.property('mod_version')}+mc${mc}"
+	p.base.archivesName = rootProject.property('archives_base_name')
+
+	p.repositories {
+		maven { name = 'TerraformersMC (Mod Menu)'; url = 'https://maven.terraformersmc.com/releases/' }
+		exclusiveContent {
+			forRepository { maven { name = 'Modrinth'; url = 'https://api.modrinth.com/maven' } }
+			filter { includeGroup 'maven.modrinth' }
+		}
+	}
+
+	// --- preprocess shared sources for this version ---
+	def ppRoot = p.layout.buildDirectory.dir('preprocessed')
+	def ppTask = p.tasks.register('preprocessSources') {
+		def srcRoot = rootProject.file('src')
+		inputs.dir(srcRoot)
+		inputs.property('mc', mcNum)
+		inputs.property('flags', flags.toString())
+		outputs.dir(ppRoot)
+		doLast {
+			def outRoot = ppRoot.get().asFile
+			p.delete(outRoot)
+			srcRoot.eachFileRecurse { f ->
+				if (!f.isFile()) return
+				def rel = srcRoot.toPath().relativize(f.toPath()).toString()
+				def target = new File(outRoot, rel)
+				target.parentFile.mkdirs()
+				def name = f.name
+				if (name.endsWith('.java') || name.endsWith('.json')) {
+					target.setText(preprocess(f.getText('UTF-8'), mcNum, flags, rel), 'UTF-8')
+				} else {
+					java.nio.file.Files.copy(f.toPath(), target.toPath())
+				}
+			}
+		}
+	}
+
+	p.sourceSets.main.java.srcDirs = [ppRoot.map { it.dir('main/java') }]
+	p.sourceSets.main.resources.srcDirs = [ppRoot.map { it.dir('main/resources') }]
+	p.tasks.named('compileJava') { dependsOn ppTask }
+	p.tasks.named('processResources') { dependsOn ppTask }
+	p.tasks.matching { it.name == 'sourcesJar' }.configureEach { dependsOn ppTask }
+
+	p.dependencies {
+		minecraft "com.mojang:minecraft:${mc}"
+		if (remap) {
+			mappings p.extensions.getByName('loom').officialMojangMappings()
+			modImplementation "net.fabricmc:fabric-loader:${rootProject.property('loader_version')}"
+			modImplementation "net.fabricmc.fabric-api:fabric-api:${p.property('fabric_api_version')}"
+			modCompileOnly "maven.modrinth:sodium:${p.property('sodium_version')}"
+			if (!flags.getOrDefault('SODIUM_CONFIG_API', false)) modCompileOnly("com.terraformersmc:modmenu:${javaVersion >= 21 ? '11.0.3' : '7.2.2'}") { transitive = false }
+			if (p.findProperty('test_without_sodium') != 'true') modLocalRuntime "maven.modrinth:sodium:${p.property('sodium_version')}"
+		} else {
+			implementation "net.fabricmc:fabric-loader:${rootProject.property('loader_version')}"
+			implementation "net.fabricmc.fabric-api:fabric-api:${p.property('fabric_api_version')}"
+			compileOnly "maven.modrinth:sodium:${p.property('sodium_version')}"
+			// some Sodium builds crash inside Fabric's gametest screenshots - those versions are tested without Sodium
+			if (p.findProperty('test_without_sodium') != 'true') localRuntime "maven.modrinth:sodium:${p.property('sodium_version')}"
+		}
+	}
+
+	p.processResources {
+		def props = [version: p.property('mod_version'), minecraft: mc, java: javaVersion]
+		inputs.properties(props)
+		filesMatching('fabric.mod.json') { expand props }
+	}
+
+	p.java {
+		toolchain { languageVersion = JavaLanguageVersion.of(javaVersion) }
+		withSourcesJar()
+	}
+	p.tasks.withType(JavaCompile).configureEach { it.options.release = javaVersion; it.options.encoding = 'UTF-8' }
+
+	// in-game client test (versions that have Fabric's client gametest API)
+	if (flags.getOrDefault('CLIENT_GAMETEST', false)) {
+		p.fabricApi {
+			configureTests {
+				createSourceSet = true
+				modId = "silicium-test"
+				enableGameTests = false
+				enableClientGameTests = true
+				eula = true
+			}
+		}
+		p.sourceSets.gametest.java.srcDirs = [ppRoot.map { it.dir('gametest/java') }]
+		p.sourceSets.gametest.resources.srcDirs = [ppRoot.map { it.dir('gametest/resources') }]
+		p.tasks.named('compileGametestJava') { dependsOn ppTask }
+		p.tasks.named('processGametestResources') { dependsOn ppTask }
+		// Sodium on the test compile classpath (Loom names the remapped configuration differently per plugin)
+		def sodiumDep = "maven.modrinth:sodium:${p.property('sodium_version')}"
+		def conf = ['gametestModCompileOnly', 'modGametestCompileOnly', 'gametestCompileOnly']
+				.find { p.configurations.findByName(it) != null }
+		p.dependencies.add(conf, sodiumDep)
+	}
+
+	// self-test run (mixin audit at the title screen) for versions without the client gametest API
+	p.extensions.getByName('loom').runs.create('selfTest') {
+		client()
+		vmArg('-Dsilicium.selftest=true')
+		runDir('run-selftest')
+	}
+
+	def jarTask = remap ? 'remapJar' : 'jar'
+
+	// production check: real (obfuscated where applicable) game + the built jar + Fabric API, then the mixin self-test
+	def prodMods = p.configurations.detachedConfiguration(
+			p.dependencies.create("net.fabricmc.fabric-api:fabric-api:${p.property('fabric_api_version')}"))
+	prodMods.transitive = false
+	p.tasks.register('prodSelfTest', net.fabricmc.loom.task.prod.ClientProductionRunTask) {
+		group = 'verification'
+		if (!p.hasProperty('prodWithoutSilicium')) mods.from(p.tasks.named(jarTask)) // -PprodWithoutSilicium: baseline run
+		mods.from(prodMods)
+		jvmArgs.add('-Dsilicium.selftest=true')
+		runDir = p.layout.projectDirectory.dir('run-prod')
+		javaLauncher = p.extensions.getByType(JavaToolchainService).launcherFor { languageVersion = JavaLanguageVersion.of(javaVersion) }
+	}
+	collectJars.configure { from(p.tasks.named(jarTask)) }
+	p.tasks.named('build') { finalizedBy collectJars }
+}

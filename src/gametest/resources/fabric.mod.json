@@ -1,0 +1,13 @@
+{
+	"schemaVersion": 1,
+	"id": "silicium-test",
+	"version": "1.0.0",
+	"name": "Silicium Test",
+	"environment": "*",
+	"entrypoints": {
+		"fabric-client-gametest": ["pl.silicium.test.SiliciumClientTest"]
+	},
+	"depends": {
+		"silicium": "*"
+	}
+}

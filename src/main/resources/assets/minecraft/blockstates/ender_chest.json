@@ -1,0 +1,19 @@
+{
+	"variants": {
+		"facing=south": {
+			"model": "silicium:block/chest/ender_single"
+		},
+		"facing=west": {
+			"model": "silicium:block/chest/ender_single",
+			"y": 90
+		},
+		"facing=north": {
+			"model": "silicium:block/chest/ender_single",
+			"y": 180
+		},
+		"facing=east": {
+			"model": "silicium:block/chest/ender_single",
+			"y": 270
+		}
+	}
+}

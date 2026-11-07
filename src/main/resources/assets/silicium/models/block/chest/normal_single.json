@@ -1,0 +1,7 @@
+{
+	"parent": "silicium:block/chest/template_single",
+	"textures": {
+		"chest": "minecraft:entity/chest/normal",
+		"particle": "minecraft:block/oak_planks"
+	}
+}

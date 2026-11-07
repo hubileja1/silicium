@@ -1,0 +1,49 @@
+{
+	"variants": {
+		"facing=south,type=single": {
+			"model": "silicium:block/chest/trapped_single"
+		},
+		"facing=south,type=left": {
+			"model": "silicium:block/chest/trapped_left"
+		},
+		"facing=south,type=right": {
+			"model": "silicium:block/chest/trapped_right"
+		},
+		"facing=west,type=single": {
+			"model": "silicium:block/chest/trapped_single",
+			"y": 90
+		},
+		"facing=west,type=left": {
+			"model": "silicium:block/chest/trapped_left",
+			"y": 90
+		},
+		"facing=west,type=right": {
+			"model": "silicium:block/chest/trapped_right",
+			"y": 90
+		},
+		"facing=north,type=single": {
+			"model": "silicium:block/chest/trapped_single",
+			"y": 180
+		},
+		"facing=north,type=left": {
+			"model": "silicium:block/chest/trapped_left",
+			"y": 180
+		},
+		"facing=north,type=right": {
+			"model": "silicium:block/chest/trapped_right",
+			"y": 180
+		},
+		"facing=east,type=single": {
+			"model": "silicium:block/chest/trapped_single",
+			"y": 270
+		},
+		"facing=east,type=left": {
+			"model": "silicium:block/chest/trapped_left",
+			"y": 270
+		},
+		"facing=east,type=right": {
+			"model": "silicium:block/chest/trapped_right",
+			"y": 270
+		}
+	}
+}

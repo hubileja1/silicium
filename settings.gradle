@@ -1,0 +1,27 @@
+pluginManagement {
+	repositories {
+		maven { name = 'Fabric'; url = 'https://maven.fabricmc.net/' }
+		mavenCentral()
+		gradlePluginPortal()
+	}
+}
+
+plugins {
+	// Auto-download the JDK each Minecraft version needs (17 / 21 / 25)
+	id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
+rootProject.name = 'silicium'
+
+// One subproject per Minecraft version: versions/<mc>/gradle.properties holds its dependencies.
+// Build a subset with:  ./gradlew build -Psilicium.versions=26.3,1.21.11
+def wanted = (startParameter.projectProperties['silicium.versions'] ?: providers.gradleProperty('silicium.versions').getOrElse(''))
+		.split(',').collect { it.trim() }.findAll { it }
+file('versions').listFiles().findAll { it.isDirectory() && new File(it, 'gradle.properties').exists() }
+		.sort { it.name }
+		.each { dir ->
+			if (wanted.isEmpty() || wanted.contains(dir.name)) {
+				include ":${dir.name}"
+				project(":${dir.name}").projectDir = dir
+			}
+		}

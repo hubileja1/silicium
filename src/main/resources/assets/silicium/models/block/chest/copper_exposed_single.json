@@ -1,0 +1,7 @@
+{
+	"parent": "silicium:block/chest/template_single",
+	"textures": {
+		"chest": "minecraft:entity/chest/copper_exposed",
+		"particle": "minecraft:block/copper_block"
+	}
+}
